@@ -64,6 +64,68 @@ class StreamingTests(unittest.TestCase):
         state = StreamingTranscriber(FakeModel([]), Lock())
         self.assertEqual(state.process(b"", final=True)["type"], "done")
 
+    def test_drifting_last_word_does_not_reappear(self):
+        state = StreamingTranscriber(FakeModel([
+            [(0, .4, " Hello")],
+            [(0, .4, " Hello")],
+            [(0, .5, " Hello")],
+            [(0, .5, " Hello")],
+        ]), Lock())
+        state.process(pcm(1))
+        state.process(pcm(1))
+        for final in (False, True):
+            result = state.process(pcm(1), final=final)
+            self.assertEqual(result["text"], "Hello")
+            self.assertEqual(result["partial"], "")
+
+    def test_drifting_phrase_after_trim_and_punctuation_change(self):
+        state = StreamingTranscriber(FakeModel([
+            [(2, 2.4, " Hello"), (2.4, 3, " world")],
+            [(2, 2.4, " Hello"), (2.4, 3, " world")],
+            [(0, .5, " hello,"), (.4, 1.2, " world."),
+             (1.3, 1.8, " Again")],
+        ]), Lock())
+        state.process(pcm(4))
+        state.process(pcm(1))
+        result = state.process(pcm(1), final=True)
+        self.assertEqual(result["text"], "Hello world Again")
+
+    def test_real_repetition_survives_drifting_overlap(self):
+        state = StreamingTranscriber(FakeModel([
+            [(0, .4, " very")],
+            [(0, .4, " very")],
+            [(0, .5, " very"), (.45, .8, " very"), (.8, 1.2, " good")],
+            [(0, .5, " very"), (.45, .8, " very"), (.8, 1.2, " good")],
+        ]), Lock())
+        state.process(pcm(1))
+        state.process(pcm(1))
+        self.assertEqual(state.process(pcm(1))["partial"], " very good")
+        self.assertEqual(state.process(pcm(1))["text"], "very very good")
+
+    def test_later_identical_word_without_overlap_survives(self):
+        state = StreamingTranscriber(FakeModel([
+            [(0, .4, " yes")],
+            [(0, .4, " yes")],
+            [(1, 1.4, " yes")],
+        ]), Lock())
+        state.process(pcm(1))
+        state.process(pcm(1))
+        self.assertEqual(state.process(pcm(1), final=True)["text"], "yes yes")
+
+    def test_prompt_contains_only_audio_trimmed_away(self):
+        model = FakeModel([
+            [(0, .4, " Hello")],
+            [(0, .4, " Hello")],
+            [(0, .4, " Hello"), (2, 2.4, " world")],
+        ])
+        state = StreamingTranscriber(model, Lock())
+        state.process(pcm(1))
+        state.process(pcm(1))
+        self.assertEqual(state.prompt, "")
+        state.process(pcm(1), final=True)
+        self.assertEqual(state.prompt, " Hello")
+        self.assertEqual([w[2] for w in state.committed_words], [" world"])
+
 
 if __name__ == "__main__":
     unittest.main()

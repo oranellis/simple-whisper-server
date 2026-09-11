@@ -9,6 +9,9 @@ they are transport packets, not independent transcription boundaries.
 The server decodes the rolling audio roughly once per second, subject to GPU
 speed, and commits a matching word prefix across two successive hypotheses.
 The newest 500 ms remains provisional. Faint text in the UI may change.
+Overlap matching uses word text and overlapping timestamps to suppress words
+already committed, including small timestamp and punctuation changes. Separate
+spoken repetitions are retained. Prompt context includes only trimmed audio.
 
 Committed audio is trimmed with one second of overlap. At approximately
 25 seconds of unresolved audio, the oldest hypothesis is finalized to keep

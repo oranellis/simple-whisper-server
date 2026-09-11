@@ -14,6 +14,8 @@ class StreamingTranscriber:
         self.offset = 0.0
         self.committed_end = 0.0
         self.committed = ""
+        self.committed_words = []
+        self.prompt = ""
         self.previous = []
 
     def process(self, pcm, final=False):
@@ -28,15 +30,15 @@ class StreamingTranscriber:
                 beam_size=1,
                 vad_filter=True,
                 word_timestamps=True,
-                initial_prompt=self.committed[-500:] or None,
+                initial_prompt=self.prompt or None,
                 condition_on_previous_text=False,
             )
             segments = list(segments)
         words = [
             (w.start + self.offset, w.end + self.offset, w.word)
             for s in segments for w in (s.words or [])
-            if w.end + self.offset > self.committed_end + 0.05
         ]
+        words = self.remove_committed_overlap(words)
         count = 0
         # Never commit the newest edge: the next packet may complete a word.
         safe_end = self.offset + len(self.audio) / SAMPLE_RATE - 0.5
@@ -65,11 +67,39 @@ class StreamingTranscriber:
         remove = max(0, min(len(self.audio), int((cut - self.offset) * SAMPLE_RATE)))
         self.audio = self.audio[remove:].copy()
         self.offset += remove / SAMPLE_RATE
+        expired = [w for w in self.committed_words if w[1] <= self.offset]
+        self.prompt = (self.prompt + "".join(w[2] for w in expired))[-500:]
+        self.committed_words = [w for w in self.committed_words if w[1] > self.offset]
         return self.result(final)
+
+    def remove_committed_overlap(self, words):
+        """Match acoustic occurrences, not just text or drifting end times."""
+        remaining = []
+        matched = set()
+        for word in words:
+            candidates = []
+            for index, old in enumerate(self.committed_words):
+                if index in matched or self.word_key(old[2]) != self.word_key(word[2]):
+                    continue
+                overlap = min(old[1], word[1]) - max(old[0], word[0])
+                duration = min(old[1] - old[0], word[1] - word[0])
+                drift = abs(old[0] - word[0]) + abs(old[1] - word[1])
+                if duration > 0 and overlap >= duration * 0.5 and drift <= 0.7:
+                    candidates.append((drift, index))
+            if candidates:
+                matched.add(min(candidates)[1])
+            elif word[1] > self.committed_end + 0.05:
+                remaining.append(word)
+        return remaining
+
+    @staticmethod
+    def word_key(text):
+        return "".join(char for char in text.casefold() if char.isalnum())
 
     def commit(self, words):
         if words:
             self.committed += "".join(w[2] for w in words)
+            self.committed_words.extend(words)
             self.committed_end = words[-1][1]
 
     def result(self, final):
