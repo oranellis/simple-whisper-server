@@ -26,3 +26,18 @@ This is a small local-agreement implementation inspired by
 of that package. Recognition still runs on overlapping audio windows.
 
 Run the model-independent tests with `python -m unittest test_streaming.py`.
+
+Every live session is recorded to `recordings/<UTC-time>-<unique-id>.wav`
+on the server (16 kHz mono, 16-bit PCM). Set `RECORDINGS_DIR` to change the
+directory. The directory must be writable; recording failures stop the session.
+Audio is written as received, including packets waiting for transcription.
+Stop, disconnect, and handled errors finalize the WAV file.
+
+A matching `.jsonl` file stores language, raw and filtered word hypotheses
+with timestamps in seconds from recording start, displayed transcript updates,
+and the session end reason. Use both files to investigate repeated words.
+Each word entry is `[start_seconds, end_seconds, text]`; timestamps remain
+relative to the full recording even after the recognition buffer is trimmed.
+Recordings stay on disk until manually removed; no automatic retention limit
+is configured. The default recordings directory is ignored by Git and is not
+served by the web app. Run all tests with `python -m unittest discover`.

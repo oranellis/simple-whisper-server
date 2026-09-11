@@ -17,8 +17,10 @@ class StreamingTranscriber:
         self.committed_words = []
         self.prompt = ""
         self.previous = []
+        self.last_trace = None
 
     def process(self, pcm, final=False):
+        self.last_trace = None
         samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
         self.audio = np.concatenate((self.audio, samples))
         if not len(self.audio):
@@ -38,7 +40,14 @@ class StreamingTranscriber:
             (w.start + self.offset, w.end + self.offset, w.word)
             for s in segments for w in (s.words or [])
         ]
+        self.last_trace = {
+            "buffer_start": self.offset,
+            "buffer_end": self.offset + len(self.audio) / SAMPLE_RATE,
+            "committed_end": self.committed_end,
+            "raw_words": words,
+        }
         words = self.remove_committed_overlap(words)
+        self.last_trace["filtered_words"] = words
         count = 0
         # Never commit the newest edge: the next packet may complete a word.
         safe_end = self.offset + len(self.audio) / SAMPLE_RATE - 0.5

@@ -126,6 +126,23 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(state.prompt, " Hello")
         self.assertEqual([w[2] for w in state.committed_words], [" world"])
 
+    def test_trace_preserves_raw_duplicates_and_absolute_times(self):
+        state = StreamingTranscriber(FakeModel([
+            [(2, 3, " comma")],
+            [(2, 3, " comma")],
+            [(0, 1.1, " Comma."), (1.2, 1.6, " next")],
+        ]), Lock())
+        state.process(pcm(4))
+        state.process(pcm(1))
+        state.process(pcm(1), final=True)
+        trace = state.last_trace
+        self.assertEqual(trace["buffer_start"], 2)
+        self.assertEqual(trace["buffer_end"], 6)
+        self.assertEqual(trace["committed_end"], 3)
+        self.assertEqual(trace["raw_words"],
+                         [(2, 3.1, " Comma."), (3.2, 3.6, " next")])
+        self.assertEqual(trace["filtered_words"], [(3.2, 3.6, " next")])
+
 
 if __name__ == "__main__":
     unittest.main()
