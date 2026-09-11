@@ -1,7 +1,8 @@
 faster-whisper
 fastapi
 uvicorn
-python-multipart
+websockets
+numpy
 
 nvidia-cublas-cu12
 nvidia-cudnn-cu12==9.*
