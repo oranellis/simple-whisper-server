@@ -93,7 +93,11 @@ class StreamingTranscriber:
                 overlap = min(old[1], word[1]) - max(old[0], word[0])
                 duration = min(old[1] - old[0], word[1] - word[0])
                 drift = abs(old[0] - word[0]) + abs(old[1] - word[1])
-                if duration > 0 and overlap >= duration * 0.5 and drift <= 0.7:
+                # A word's start can include preceding silence until trimming
+                # changes the alignment. A close end plus substantial overlap
+                # still identifies that occurrence despite a large start shift.
+                aligned = drift <= 0.7 or abs(old[1] - word[1]) <= 0.35
+                if duration > 0 and overlap >= duration * 0.5 and aligned:
                     candidates.append((drift, index))
             if candidates:
                 matched.add(min(candidates)[1])

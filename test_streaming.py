@@ -143,6 +143,37 @@ class StreamingTests(unittest.TestCase):
                          [(2, 3.1, " Comma."), (3.2, 3.6, " next")])
         self.assertEqual(trace["filtered_words"], [(3.2, 3.6, " next")])
 
+    def test_recorded_comma_start_shift_after_trimming(self):
+        # Recorded hypothesis: a long silence was included in the first
+        # word's start time, then excluded after the audio buffer was trimmed.
+        state = StreamingTranscriber(FakeModel([
+            [(2.529875, 4.849875, " comma")],
+            [(2.529875, 4.849875, " comma")],
+            [(.43, 1.23, " Comma.")],
+            [(.43, 1.23, " Comma.")],
+            [(.43, 1.23, " Comma.")],
+        ]), Lock())
+        state.process(pcm(5))
+        self.assertEqual(state.process(pcm(1))["text"], "comma")
+        self.assertAlmostEqual(state.offset, 3.849875)
+        for final in (False, False, True):
+            result = state.process(pcm(1), final=final)
+            self.assertEqual(result["text"], "comma")
+            self.assertEqual(result["partial"], "")
+
+    def test_repeat_with_small_boundary_overlap_is_not_removed(self):
+        state = StreamingTranscriber(None, Lock())
+        state.commit([(2.529875, 4.849875, " comma")])
+        repeated = (4.799875, 5.149875, " comma")
+        self.assertEqual(state.remove_committed_overlap([repeated]), [repeated])
+
+    def test_large_start_shift_matches_only_one_occurrence(self):
+        state = StreamingTranscriber(None, Lock())
+        state.commit([(2.529875, 4.849875, " comma")])
+        replay = (4.279875, 5.079875, " Comma.")
+        repeated = (5.1, 5.5, " comma")
+        self.assertEqual(state.remove_committed_overlap([replay, repeated]), [repeated])
+
 
 if __name__ == "__main__":
     unittest.main()
