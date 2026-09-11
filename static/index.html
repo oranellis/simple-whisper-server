@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>Faster Whisper</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+</head>
+
+<body>
+    <main>
+        <h1>Faster Whisper</h1>
+
+        <section>
+            <h2>File transcription</h2>
+
+            <form id="file-form">
+                <label>
+                    Audio file
+                    <input
+                        id="file"
+                        type="file"
+                        accept="audio/*,video/*"
+                        required
+                    >
+                </label>
+
+                <label>
+                    Language
+                    <input
+                        id="file-language"
+                        type="text"
+                        value="en"
+                    >
+                </label>
+
+                <button type="submit">
+                    Transcribe
+                </button>
+            </form>
+
+            <div
+                id="file-status"
+                class="status"
+            >
+                Ready
+            </div>
+
+            <pre id="file-output"></pre>
+        </section>
+
+        <section>
+            <h2>Live microphone</h2>
+
+            <label>
+                Language
+                <input
+                    id="live-language"
+                    type="text"
+                    value="en"
+                >
+            </label>
+
+            <div class="buttons">
+                <button
+                    id="live-start"
+                    type="button"
+                >
+                    Start listening
+                </button>
+
+                <button
+                    id="live-stop"
+                    type="button"
+                    disabled
+                >
+                    Stop
+                </button>
+            </div>
+
+            <div
+                id="live-status"
+                class="status"
+            >
+                Ready
+            </div>
+
+            <pre id="live-output"></pre>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
