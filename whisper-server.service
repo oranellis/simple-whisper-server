@@ -1,0 +1,14 @@
+[Unit]
+Description=Faster Whisper streaming transcription server
+After=network.target
+
+[Service]
+Type=simple
+User=oran
+WorkingDirectory=/home/oran/Services/whisper
+ExecStart=/home/oran/Services/whisper/run.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

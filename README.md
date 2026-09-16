@@ -43,3 +43,10 @@ relative to the full recording even after the recognition buffer is trimmed.
 Recordings stay on disk until manually removed; no automatic retention limit
 is configured. The default recordings directory is ignored by Git and is not
 served by the web app. Run all tests with `python -m unittest discover`.
+
+## Installation
+
+Install the service with
+```
+sudo ln -s "$(pwd)/whisper-server.service" /etc/systemd/system/
+```
