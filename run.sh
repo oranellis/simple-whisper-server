@@ -4,6 +4,10 @@ set -e
 
 cd "$(dirname "$0")"
 
+if [[ "${1:-}" == "--turbo" ]]; then
+    export WHISPER_TURBO=1
+fi
+
 source .venv/bin/activate
 
 export LD_LIBRARY_PATH="$(

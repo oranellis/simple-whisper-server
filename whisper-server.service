@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=oran
 WorkingDirectory=/home/oran/Services/whisper
+EnvironmentFile=-/home/oran/Services/whisper/whisper-server.env
 ExecStart=/home/oran/Services/whisper/run.sh
 Restart=on-failure
 RestartSec=5

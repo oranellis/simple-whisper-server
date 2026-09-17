@@ -15,17 +15,31 @@ from sessions import SessionNotFound, SessionStore
 
 app = FastAPI(title="Faster Whisper")
 
-print("Loading Faster Whisper turbo model...", flush=True)
+model_name = "turbo" if os.environ.get("WHISPER_TURBO") else "large-v3"
+
+print(f"Loading Faster Whisper {model_name} model...", flush=True)
 
 model = WhisperModel(
-    "turbo",
+    model_name,
     device="cuda",
     compute_type="float16",
 )
 
-print("Faster Whisper model loaded.", flush=True)
+print(f"Faster Whisper {model_name} model loaded.", flush=True)
 
 model_lock = Lock()
+
+print("Loading Faster Whisper large-v3-turbo model (for translation)...", flush=True)
+
+translate_model = WhisperModel(
+    "large-v3-turbo",
+    device="cuda",
+    compute_type="float16",
+)
+
+print("Faster Whisper large-v3-turbo model loaded.", flush=True)
+
+translate_model_lock = Lock()
 sessions = SessionStore(os.environ.get("RECORDINGS_DIR", "recordings"))
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -68,9 +82,9 @@ def rename_session(session_id: str, request: RenameSessionRequest):
         raise HTTPException(status_code=404, detail="Session not found")
 
 
-def _transcribe_audio(audio_bytes, language, task, prompt):
-    with model_lock:
-        segments, _ = model.transcribe(
+def _transcribe_audio(audio_bytes, language, task, prompt, whisper_model, lock):
+    with lock:
+        segments, _ = whisper_model.transcribe(
             io.BytesIO(audio_bytes),
             language=language,
             task=task,
@@ -80,14 +94,16 @@ def _transcribe_audio(audio_bytes, language, task, prompt):
         return "".join(segment.text for segment in segments).strip()
 
 
-async def _batch_transcribe(file, language, prompt, task):
+async def _batch_transcribe(file, language, prompt, task, whisper_model, lock):
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file")
     if language in (None, "", "auto"):
         language = None
     try:
-        text = await asyncio.to_thread(_transcribe_audio, audio_bytes, language, task, prompt)
+        text = await asyncio.to_thread(
+            _transcribe_audio, audio_bytes, language, task, prompt, whisper_model, lock
+        )
     except Exception:
         logging.exception("Batch transcription failed")
         raise HTTPException(status_code=400, detail="Could not transcribe audio")
@@ -96,8 +112,9 @@ async def _batch_transcribe(file, language, prompt, task):
 
 # OpenAI Whisper API-compatible endpoints (https://platform.openai.com/docs/api-reference/audio),
 # for clients such as Voxtype that transcribe via a remote server. `model` and
-# `response_format` are accepted for compatibility but ignored: this server
-# always runs the loaded turbo (large-v3-turbo) model and returns JSON.
+# `response_format` are accepted for compatibility but ignored: transcription
+# always runs the loaded server model (see --turbo) and translation the
+# loaded large-v3-turbo model, both returning JSON.
 @app.post("/v1/audio/transcriptions")
 async def transcribe_upload(
     file: UploadFile = File(...),
@@ -106,7 +123,7 @@ async def transcribe_upload(
     prompt: str | None = Form(None),
     response_format: str | None = Form(None),
 ):
-    return await _batch_transcribe(file, language, prompt, "transcribe")
+    return await _batch_transcribe(file, language, prompt, "transcribe", model, model_lock)
 
 
 @app.post("/v1/audio/translations")
@@ -116,7 +133,9 @@ async def translate_upload(
     prompt: str | None = Form(None),
     response_format: str | None = Form(None),
 ):
-    return await _batch_transcribe(file, None, prompt, "translate")
+    return await _batch_transcribe(
+        file, None, prompt, "translate", translate_model, translate_model_lock
+    )
 
 
 @app.websocket("/transcribe-stream")
@@ -239,7 +258,8 @@ def index():
 def health():
     return {
         "status": "ok",
-        "model": "turbo",
+        "model": model_name,
+        "translate_model": "large-v3-turbo",
         "device": "cuda",
         "compute_type": "float16",
     }

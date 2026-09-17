@@ -36,8 +36,9 @@ dropping audio.
 
 `POST /v1/audio/transcriptions` and `POST /v1/audio/translations` accept a
 single audio file (`multipart/form-data`, field `file`) and run one batch
-transcription with the same loaded turbo (large-v3-turbo) model, no session
-required. They match enough of the [OpenAI audio API](
+transcription with the same loaded model used for live capture (see
+`--turbo` below), no session required. They match enough of the [OpenAI audio
+API](
 https://platform.openai.com/docs/api-reference/audio) shape for clients such
 as [Voxtype](https://voxtype.io/) that transcribe via a remote server:
 `model` and `response_format` are accepted but ignored (the response is
@@ -73,6 +74,18 @@ recognition buffer is trimmed. Recordings stay on disk until manually
 removed; no automatic retention limit is configured. The default recordings
 directory is ignored by Git and is not served by the web app. Run all tests
 with `python -m unittest discover`.
+
+## Model
+
+By default the server loads `large-v3` for transcription and live capture.
+Run `./run.sh --turbo` to load `turbo` (large-v3-turbo) instead, which is
+faster but less accurate. `/v1/audio/translations` always uses a separate,
+fixed `large-v3-turbo` model, independent of this setting.
+
+Under systemd, set the model via config instead of an argument: copy
+`whisper-server.env.example` to `whisper-server.env` (ignored by Git) and
+uncomment `WHISPER_TURBO=1`. The unit file loads this file automatically if
+present; `systemctl restart whisper-server` picks up changes.
 
 ## Installation
 
