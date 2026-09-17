@@ -30,8 +30,22 @@ Committed audio is trimmed with one second of overlap. At approximately
 the buffer bounded; this fallback can be less accurate than stable agreement.
 Stop flushes the remaining audio and final hypothesis before allowing restart.
 Slow clients or excessive server backlogs receive an error instead of silently
-dropping audio. Only live microphone transcription is supported; file uploads
-and the legacy chunk-based POST endpoints have been removed.
+dropping audio.
+
+## OpenAI Whisper API-compatible endpoints
+
+`POST /v1/audio/transcriptions` and `POST /v1/audio/translations` accept a
+single audio file (`multipart/form-data`, field `file`) and run one batch
+transcription with the same loaded turbo (large-v3-turbo) model, no session
+required. They match enough of the [OpenAI audio API](
+https://platform.openai.com/docs/api-reference/audio) shape for clients such
+as [Voxtype](https://voxtype.io/) that transcribe via a remote server:
+`model` and `response_format` are accepted but ignored (the response is
+always `{"text": "..."}`); `language` is optional (omitted or `"auto"` lets
+Whisper detect it); `prompt` is passed through as the initial prompt.
+`/translations` always translates to English and ignores `language`. Point
+Voxtype's `remote_endpoint` at this server's base URL (e.g.
+`http://<host>:8000`) with `mode = "remote"`.
 
 This is a small local-agreement implementation inspired by
 [Whisper-Streaming](https://github.com/ufal/whisper_streaming), not an integration

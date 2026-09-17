@@ -1,5 +1,6 @@
 faster-whisper
 fastapi
+python-multipart
 uvicorn
 websockets
 numpy

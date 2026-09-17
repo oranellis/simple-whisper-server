@@ -1,9 +1,10 @@
 import asyncio
+import io
 import logging
 import os
 from threading import Lock
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -65,6 +66,57 @@ def rename_session(session_id: str, request: RenameSessionRequest):
         return sessions.rename(session_id, name)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail="Session not found")
+
+
+def _transcribe_audio(audio_bytes, language, task, prompt):
+    with model_lock:
+        segments, _ = model.transcribe(
+            io.BytesIO(audio_bytes),
+            language=language,
+            task=task,
+            initial_prompt=prompt or None,
+            vad_filter=True,
+        )
+        return "".join(segment.text for segment in segments).strip()
+
+
+async def _batch_transcribe(file, language, prompt, task):
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    if language in (None, "", "auto"):
+        language = None
+    try:
+        text = await asyncio.to_thread(_transcribe_audio, audio_bytes, language, task, prompt)
+    except Exception:
+        logging.exception("Batch transcription failed")
+        raise HTTPException(status_code=400, detail="Could not transcribe audio")
+    return {"text": text}
+
+
+# OpenAI Whisper API-compatible endpoints (https://platform.openai.com/docs/api-reference/audio),
+# for clients such as Voxtype that transcribe via a remote server. `model` and
+# `response_format` are accepted for compatibility but ignored: this server
+# always runs the loaded turbo (large-v3-turbo) model and returns JSON.
+@app.post("/v1/audio/transcriptions")
+async def transcribe_upload(
+    file: UploadFile = File(...),
+    model_name: str | None = Form(None, alias="model"),
+    language: str | None = Form(None),
+    prompt: str | None = Form(None),
+    response_format: str | None = Form(None),
+):
+    return await _batch_transcribe(file, language, prompt, "transcribe")
+
+
+@app.post("/v1/audio/translations")
+async def translate_upload(
+    file: UploadFile = File(...),
+    model_name: str | None = Form(None, alias="model"),
+    prompt: str | None = Form(None),
+    response_format: str | None = Form(None),
+):
+    return await _batch_transcribe(file, None, prompt, "translate")
 
 
 @app.websocket("/transcribe-stream")
