@@ -3,8 +3,18 @@
 Install `requirements.txt` in your Python environment and run `./run.sh`
 with a compatible CUDA setup. Microphone capture requires HTTPS or localhost.
 
+The web UI organizes recordings into sessions, listed on the left. Create a
+session, then start and stop the microphone any number of times within it;
+each recording appends to that session's transcript. Sessions can be renamed
+from the list. The session REST API: `GET /api/sessions` lists sessions
+(id, name, language, timestamps, and a short text preview), `POST
+/api/sessions` creates one (`{"name": "..."}`, name optional), `GET
+/api/sessions/{id}` returns the full session including its transcript, and
+`PATCH /api/sessions/{id}` with `{"name": "..."}` renames it.
+
 Live capture sends continuous mono 16 kHz signed little-endian PCM through
-`/transcribe-stream?language=en`. AudioWorklet packets contain 250 ms of audio;
+`/transcribe-stream?language=en&session_id=<id>`, where `session_id` is an
+existing session's id. AudioWorklet packets contain 250 ms of audio;
 they are transport packets, not independent transcription boundaries.
 The server decodes the rolling audio roughly once per second, subject to GPU
 speed, and commits a matching word prefix across two successive hypotheses.
@@ -29,20 +39,26 @@ of that package. Recognition still runs on overlapping audio windows.
 
 Run the model-independent tests with `python -m unittest test_streaming.py`.
 
-Every live session is recorded to `recordings/<UTC-time>-<unique-id>.wav`
-on the server (16 kHz mono, 16-bit PCM). Set `RECORDINGS_DIR` to change the
-directory. The directory must be writable; recording failures stop the session.
-Audio is written as received, including packets waiting for transcription.
-Stop, disconnect, and handled errors finalize the WAV file.
+Each session is stored under `recordings/<UTC-time>-<unique-id>/` on the
+server. Set `RECORDINGS_DIR` to change the base directory. `meta.json` holds
+the session's name, language, accumulated transcript text, and timestamps.
+Every start/stop recording within the session is a separate segment under
+`segments/<UTC-time>-<unique-id>.wav` (16 kHz mono, 16-bit PCM) with a
+matching `.jsonl` file. The directory must be writable; recording failures
+stop the in-progress recording. Audio is written as received, including
+packets waiting for transcription. Stop, disconnect, and handled errors
+finalize the segment's WAV file, and its committed transcript is appended to
+the session's `meta.json`.
 
-A matching `.jsonl` file stores language, raw and filtered word hypotheses
-with timestamps in seconds from recording start, displayed transcript updates,
-and the session end reason. Use both files to investigate repeated words.
-Each word entry is `[start_seconds, end_seconds, text]`; timestamps remain
-relative to the full recording even after the recognition buffer is trimmed.
-Recordings stay on disk until manually removed; no automatic retention limit
-is configured. The default recordings directory is ignored by Git and is not
-served by the web app. Run all tests with `python -m unittest discover`.
+Each segment's `.jsonl` file stores language, raw and filtered word
+hypotheses with timestamps in seconds from that segment's start, displayed
+transcript updates, and the segment's end reason. Use both files to
+investigate repeated words. Each word entry is `[start_seconds, end_seconds,
+text]`; timestamps remain relative to the segment's own start even after the
+recognition buffer is trimmed. Recordings stay on disk until manually
+removed; no automatic retention limit is configured. The default recordings
+directory is ignored by Git and is not served by the web app. Run all tests
+with `python -m unittest discover`.
 
 ## Installation
 

@@ -3,12 +3,13 @@ import logging
 import os
 from threading import Lock
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from faster_whisper import WhisperModel
 from streaming import StreamingTranscriber
-from recording import SessionRecording
+from sessions import SessionNotFound, SessionStore
 
 
 app = FastAPI(title="Faster Whisper")
@@ -24,16 +25,63 @@ model = WhisperModel(
 print("Faster Whisper model loaded.", flush=True)
 
 model_lock = Lock()
+sessions = SessionStore(os.environ.get("RECORDINGS_DIR", "recordings"))
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+class CreateSessionRequest(BaseModel):
+    name: str | None = None
+
+
+class RenameSessionRequest(BaseModel):
+    name: str
+
+
+@app.get("/api/sessions")
+def list_sessions():
+    return sessions.list()
+
+
+@app.post("/api/sessions")
+def create_session(request: CreateSessionRequest):
+    return sessions.create(request.name)
+
+
+@app.get("/api/sessions/{session_id}")
+def get_session(session_id: str):
+    try:
+        return sessions.get(session_id)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
+@app.patch("/api/sessions/{session_id}")
+def rename_session(session_id: str, request: RenameSessionRequest):
+    name = request.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name must not be empty")
+    try:
+        return sessions.rename(session_id, name)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail="Session not found")
 
 
 @app.websocket("/transcribe-stream")
 async def transcribe_stream(socket: WebSocket):
     await socket.accept()
     language = socket.query_params.get("language", "en")
+    session_id = socket.query_params.get("session_id")
+    if not session_id:
+        await socket.send_json({"type": "error", "message": "Missing session_id."})
+        await socket.close(code=1008)
+        return
     try:
-        recording = SessionRecording(os.environ.get("RECORDINGS_DIR", "recordings"), language)
+        recording = sessions.open_segment(session_id, language)
+    except SessionNotFound:
+        await socket.send_json({"type": "error", "message": "Session not found."})
+        await socket.close(code=1008)
+        return
     except Exception:
         logging.exception("Could not start session recording")
         await socket.send_json({"type": "error", "message": "Could not save audio recording; check server logs."})
@@ -42,6 +90,7 @@ async def transcribe_stream(socket: WebSocket):
     logging.info("Recording live audio to %s", recording.path)
     reason = "stopped"
     queue = asyncio.Queue(maxsize=120)
+    state = StreamingTranscriber(model, model_lock, language)
 
     async def receive():
         while True:
@@ -61,9 +110,6 @@ async def transcribe_stream(socket: WebSocket):
                 raise ValueError("Expected PCM audio or stop")
 
     async def transcribe():
-        state = StreamingTranscriber(
-            model, model_lock, language
-        )
         pending = bytearray()
         while True:
             packet = await queue.get()
@@ -121,6 +167,11 @@ async def transcribe_stream(socket: WebSocket):
             recording.close(reason)
         except Exception:
             logging.exception("Could not finalize recording %s", recording.path)
+        if state.committed:
+            try:
+                sessions.append_text(session_id, state.committed, language)
+            except Exception:
+                logging.exception("Could not update session transcript %s", session_id)
         try:
             await socket.close()
         except RuntimeError:

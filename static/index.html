@@ -16,49 +16,84 @@
 </head>
 
 <body>
-    <main>
-        <h1>Faster Whisper</h1>
-
-        <section>
-            <h2>Live microphone</h2>
-            <p>Audio and transcription diagnostics are saved on the server.</p>
-
-            <label>
-                Language
-                <input
-                    id="live-language"
-                    type="text"
-                    value="en"
-                >
-            </label>
-
-            <div class="buttons">
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Sessions</h1>
                 <button
-                    id="live-start"
+                    id="new-session"
                     type="button"
+                    title="Start a new session"
                 >
-                    Start listening
+                    + New
                 </button>
+            </div>
 
-                <button
-                    id="live-stop"
-                    type="button"
-                    disabled
-                >
-                    Stop
-                </button>
+            <ul id="session-list" class="session-list"></ul>
+        </aside>
+
+        <main class="session-pane">
+            <div
+                id="empty-state"
+                class="empty-state"
+            >
+                <p>Select a session on the left, or start a new one.</p>
             </div>
 
             <div
-                id="live-status"
-                class="status"
+                id="session-view"
+                class="session-view"
+                hidden
             >
-                Ready
-            </div>
+                <div class="recording-bar">
+                    <div class="recording-controls">
+                        <button
+                            id="live-start"
+                            type="button"
+                        >
+                            Start
+                        </button>
 
-            <pre id="live-output"></pre>
-        </section>
-    </main>
+                        <button
+                            id="live-stop"
+                            type="button"
+                            disabled
+                        >
+                            Stop
+                        </button>
+
+                        <label class="language-field">
+                            Language
+                            <input
+                                id="live-language"
+                                type="text"
+                                value="en"
+                            >
+                        </label>
+                    </div>
+
+                    <div class="session-details">
+                        <span
+                            id="session-name"
+                            class="session-name"
+                        ></span>
+
+                        <span
+                            id="live-status"
+                            class="status"
+                        >
+                            Ready
+                        </span>
+                    </div>
+                </div>
+
+                <div
+                    id="live-output"
+                    class="transcript"
+                ></div>
+            </div>
+        </main>
+    </div>
 
     <script src="/static/app.js"></script>
 </body>
